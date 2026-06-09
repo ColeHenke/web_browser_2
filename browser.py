@@ -12,4 +12,4 @@ class Url:
 
     def request(self):
         s = socket.socket(type=socket.AF_INET, family=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
-        s.connect(self.host, 80)
+        s.connect((self.host, 80))
