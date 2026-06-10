@@ -1,27 +1,40 @@
 import socket
 import ssl
 
+DATA_SCHEME = 'data:text/html,'
 
 class Url:
     def __init__(self, url):
-        self.scheme, url = url.split('://', 1)
-        assert self.scheme in ['http', 'https']
 
-        if self.scheme == 'https':
-            self.port = 443
-        elif self.scheme == 'http':
-            self.port = 80
+        if '://' in url:
+            self.scheme, url = url.split('://', 1)
+            assert self.scheme in ['http', 'https']
 
-        if '/' not in url:
-            url += '/'
-        self.host, url = url.split('/', 1)
-        self.path = '/' + url
+            if self.scheme == 'https':
+                self.port = 443
+            elif self.scheme == 'http':
+                self.port = 80
 
-        if ':' in self.host:
-            self.host, port = self.host.split(':', 1)
-            self.port = int(port)
+            if '/' not in url:
+                url += '/'
+            self.host, url = url.split('/', 1)
+            self.path = '/' + url
+
+            if ':' in self.host:
+                self.host, port = self.host.split(':', 1)
+                self.port = int(port)
+
+        elif url.startswith(DATA_SCHEME):
+            self.scheme, delim, self.content = url.partition(DATA_SCHEME)
+            assert delim == DATA_SCHEME
+            self.scheme += delim
 
     def request(self):
+
+        print(self.scheme)
+        if self.scheme == DATA_SCHEME:
+            return '<body>{}</body>\r\n'.format(self.content)
+
         s = socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
         s.connect((self.host, self.port))
 
