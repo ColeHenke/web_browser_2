@@ -70,14 +70,26 @@ class Url:
             return content
 
 
+
 def show(body):
     in_tag = False
-    for c in body:
+    skip_chars = 0
+    for i, c in enumerate(body):
+        if skip_chars > 0:
+            skip_chars -= 1
+            continue
         if c == '<':
             in_tag = True
         elif c == '>':
             in_tag = False
         elif not in_tag:
+            if c == '&':
+                if body[i+1:i+4] == 'lt;':
+                    c = '<'
+                    skip_chars += 3
+                elif body[i+1:i+4] == 'gt;':
+                    c = '>'
+                    skip_chars += 3
             print(c, end='')
 
 def load(url):
