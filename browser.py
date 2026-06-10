@@ -31,6 +31,8 @@ class Url:
 
         request = 'GET {} HTTP/1.0\r\n'.format(self.path)
         request += 'Host: {}\r\n'.format(self.host)
+        request += 'Connection: close\r\n'
+        request += 'User-Agent: supa-browsa\r\n'
         request += '\r\n'
         s.send(request.encode())
 
