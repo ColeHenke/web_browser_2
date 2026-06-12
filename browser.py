@@ -1,7 +1,9 @@
 import socket
 import ssl
+import tkinter
 
 DATA_SCHEME = 'data:text/html,'
+WIDTH, HEIGHT = 800, 600
 
 class Url:
     def __init__(self, url):
@@ -70,6 +72,20 @@ class Url:
             return content
 
 
+class Browser:
+    def __init__(self):
+        self.window = tkinter.Tk()
+        self.canvas = tkinter.Canvas(self.window, width=WIDTH, height=HEIGHT)
+        self.canvas.pack()
+
+    def load(self, url):
+        body = url.request()
+        show(body)
+        self.canvas.create_rectangle(10, 20, 400, 300)
+        self.canvas.create_oval(100, 100, 150, 150)
+        self.canvas.create_text(200, 150, text="Hi!")
+
+
 
 def show(body):
     in_tag = False
@@ -92,10 +108,7 @@ def show(body):
                     skip_chars += 3
             print(c, end='')
 
-def load(url):
-    body = url.request()
-    show(body)
-
 if __name__ == "__main__":
     import sys
-    load(Url(sys.argv[1]))
+    Browser().load(Url(sys.argv[1]))
+    tkinter.mainloop()
