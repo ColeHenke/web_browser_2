@@ -64,12 +64,12 @@ class Url:
             header, value = line.split(':', 1)
             headers[header.casefold()] = value.strip()
 
-            assert 'transfer-encoding' not in headers
-            assert 'content-encoding' not in headers
+        assert 'transfer-encoding' not in headers
+        assert 'content-encoding' not in headers
 
-            content = response.read()
-            s.close()
-            return content
+        content = response.read()
+        s.close()
+        return content
 
 
 class Browser:
@@ -79,15 +79,23 @@ class Browser:
         self.canvas.pack()
 
     def load(self, url):
+        HSTEP, VSTEP = 13, 18
+        cursor_x, cursor_y = HSTEP, VSTEP
+
         body = url.request()
-        show(body)
-        self.canvas.create_rectangle(10, 20, 400, 300)
-        self.canvas.create_oval(100, 100, 150, 150)
-        self.canvas.create_text(200, 150, text="Hi!")
+        text = lex(body)
+        for c in text:
+            self.canvas.create_text(cursor_x, cursor_y, text=c)
+            cursor_x += HSTEP
+
+            if cursor_x > WIDTH - HSTEP:
+                cursor_y += VSTEP
+                cursor_x = HSTEP
 
 
 
-def show(body):
+def lex(body):
+    text =''
     in_tag = False
     skip_chars = 0
     for i, c in enumerate(body):
@@ -106,7 +114,9 @@ def show(body):
                 elif body[i+1:i+4] == 'gt;':
                     c = '>'
                     skip_chars += 3
-            print(c, end='')
+            text += c
+
+    return text
 
 if __name__ == "__main__":
     import sys
