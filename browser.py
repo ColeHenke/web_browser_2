@@ -37,8 +37,6 @@ class Url:
             self.scheme += delim
 
     def request(self):
-
-        print(self.scheme)
         if self.scheme == DATA_SCHEME:
             return '<body>{}</body>\r\n'.format(self.content)
 
@@ -97,8 +95,9 @@ class Browser:
 
     def load(self, url):
         body = url.request()
-        text = lex(body)
-        self.display_list = layout(text)
+        tokens = lex(body)
+
+        self.display_list = Layout(tokens).display_list
         self.draw()
 
     def scrolldown(self, e):
@@ -113,36 +112,49 @@ class Tag:
     def __init__(self, tag):
         self.tag = tag
 
-def layout(tokens):
-    display_list = []
-    cursor_x, cursor_y = HSTEP, VSTEP
-    font = tkinter.font.Font()
+class Layout:
+    def __init__(self, tokens):
+        self.display_list = []
+        self.cursor_x, self.cursor_y = HSTEP, VSTEP
 
-    # some font attributes
-    weight: Literal['normal', 'bold'] = 'normal'
-    style: Literal['roman', 'italic'] = 'roman'
+        # some font attributes
+        self.weight: Literal['normal', 'bold'] = 'normal'
+        self.style: Literal['roman', 'italic'] = 'roman'
+        self.size = 12
 
-    for token in tokens:
+        for token in tokens:
+            self.token(token)
+
+    def token(self, token):
         if isinstance(token, Text):
             for word in token.text.split():
-                font = tkinter.font.Font(size=16, weight=weight, slant=style)
-                w = font.measure(word)
-                display_list.append((cursor_x, cursor_y, word, font))
-                cursor_x += w + font.measure(' ')
-
-                if cursor_x + w > WIDTH - HSTEP * 3:
-                    cursor_y += font.metrics('linespace') * 1.25
-                    cursor_x = HSTEP
+                self.word(word)
         elif token.tag == "i":
-            style = "italic"
+            self.style = "italic"
         elif token.tag == "/i":
-            style = "roman"
+            self.style = "roman"
         elif token.tag == "b":
-            weight = "bold"
+            self.weight = "bold"
         elif token.tag == "/b":
-            weight = "normal"
+            self.weight = "normal"
+        elif token.tag == "small":
+            self.size -= 2
+        elif token.tag == "/small":
+            self.size += 2
+        elif token.tag == "big":
+            self.size += 4
+        elif token.tag == "/big":
+            self.size -= 4
 
-    return display_list
+    def word(self, word):
+        font = tkinter.font.Font(size=self.size, weight=self.weight, slant=self.style)
+        w = font.measure(word)
+        self.display_list.append((self.cursor_x, self.cursor_y, word, font))
+        self.cursor_x += w + font.measure(' ')
+
+        if self.cursor_x + w > WIDTH - HSTEP * 3:
+            self.cursor_y += font.metrics('linespace') * 1.25
+            self.cursor_x = HSTEP
 
 def lex(body):
     buffer = ''
@@ -161,6 +173,8 @@ def lex(body):
             in_tag = False
             out.append(Tag(buffer))
             buffer = ''
+        elif in_tag:
+            buffer += c
         elif not in_tag:
             if c == '&':
                 if body[i+1:i+4] == 'lt;':
@@ -172,7 +186,7 @@ def lex(body):
             buffer += c
     if not in_tag and buffer:
         out.append(Text(buffer))
-    return buffer
+    return out
 
 if __name__ == "__main__":
     import sys
