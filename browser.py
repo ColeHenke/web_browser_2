@@ -3,6 +3,8 @@ import ssl
 import tkinter
 import tkinter.font
 
+from typing import Literal
+
 DATA_SCHEME = 'data:text/html,'
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
@@ -88,10 +90,10 @@ class Browser:
 
     def draw(self):
         self.canvas.delete('all')
-        for x, y, c in self.display_list:
+        for x, y, c, font in self.display_list:
             if y > self.scroll + HEIGHT: continue
             if y + VSTEP < self.scroll: continue
-            self.canvas.create_text(x, y - self.scroll, text=c, anchor='nw')
+            self.canvas.create_text(x, y - self.scroll, text=c, anchor='nw', font=font)
 
     def load(self, url):
         body = url.request()
@@ -103,25 +105,48 @@ class Browser:
         self.scroll += SCROLL_STEP
         self.draw()
 
+class Text:
+    def __init__(self, text):
+        self.text = text
 
-def layout(text):
+class Tag:
+    def __init__(self, tag):
+        self.tag = tag
+
+def layout(tokens):
     display_list = []
     cursor_x, cursor_y = HSTEP, VSTEP
     font = tkinter.font.Font()
 
-    for word in text.split():
-        w = font.measure(word)
-        display_list.append((cursor_x, cursor_y, word))
-        cursor_x += w + font.measure(' ')
+    # some font attributes
+    weight: Literal['normal', 'bold'] = 'normal'
+    style: Literal['roman', 'italic'] = 'roman'
 
-        if cursor_x + w > WIDTH - HSTEP * 3:
-            cursor_y += font.metrics('linespace') * 1.25
-            cursor_x = HSTEP
+    for token in tokens:
+        if isinstance(token, Text):
+            for word in token.text.split():
+                font = tkinter.font.Font(size=16, weight=weight, slant=style)
+                w = font.measure(word)
+                display_list.append((cursor_x, cursor_y, word, font))
+                cursor_x += w + font.measure(' ')
+
+                if cursor_x + w > WIDTH - HSTEP * 3:
+                    cursor_y += font.metrics('linespace') * 1.25
+                    cursor_x = HSTEP
+        elif token.tag == "i":
+            style = "italic"
+        elif token.tag == "/i":
+            style = "roman"
+        elif token.tag == "b":
+            weight = "bold"
+        elif token.tag == "/b":
+            weight = "normal"
 
     return display_list
 
 def lex(body):
-    text =''
+    buffer = ''
+    out = []
     in_tag = False
     skip_chars = 0
     for i, c in enumerate(body):
@@ -130,8 +155,12 @@ def lex(body):
             continue
         if c == '<':
             in_tag = True
+            if buffer: out.append(Text(buffer))
+            buffer = ''
         elif c == '>':
             in_tag = False
+            out.append(Tag(buffer))
+            buffer = ''
         elif not in_tag:
             if c == '&':
                 if body[i+1:i+4] == 'lt;':
@@ -140,9 +169,10 @@ def lex(body):
                 elif body[i+1:i+4] == 'gt;':
                     c = '>'
                     skip_chars += 3
-            text += c
-
-    return text
+            buffer += c
+    if not in_tag and buffer:
+        out.append(Text(buffer))
+    return buffer
 
 if __name__ == "__main__":
     import sys
