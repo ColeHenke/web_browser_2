@@ -1,6 +1,7 @@
 import socket
 import ssl
 import tkinter
+import tkinter.font
 
 DATA_SCHEME = 'data:text/html,'
 WIDTH, HEIGHT = 800, 600
@@ -90,11 +91,9 @@ class Browser:
         for x, y, c in self.display_list:
             if y > self.scroll + HEIGHT: continue
             if y + VSTEP < self.scroll: continue
-            self.canvas.create_text(x, y - self.scroll, text=c)
+            self.canvas.create_text(x, y - self.scroll, text=c, anchor='nw')
 
     def load(self, url):
-        cursor_x, cursor_y = HSTEP, VSTEP
-
         body = url.request()
         text = lex(body)
         self.display_list = layout(text)
@@ -108,13 +107,15 @@ class Browser:
 def layout(text):
     display_list = []
     cursor_x, cursor_y = HSTEP, VSTEP
+    font = tkinter.font.Font()
 
-    for c in text:
-        display_list.append((cursor_x, cursor_y, c))
-        cursor_x += HSTEP
+    for word in text.split():
+        w = font.measure(word)
+        display_list.append((cursor_x, cursor_y, word))
+        cursor_x += w + font.measure(' ')
 
-        if cursor_x > WIDTH - HSTEP:
-            cursor_y += VSTEP
+        if cursor_x + w > WIDTH - HSTEP * 3:
+            cursor_y += font.metrics('linespace') * 1.25
             cursor_x = HSTEP
 
     return display_list
