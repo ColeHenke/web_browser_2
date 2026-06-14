@@ -10,6 +10,19 @@ WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 
+# global font cache
+FONTS = {}
+
+# get font from cache or create new one
+def get_font(size, weight, style):
+    key = (size, weight, style)
+    if key not in FONTS:
+        font = tkinter.font.Font(size=size, weight=weight,
+            slant=style)
+        label = tkinter.Label(font=font)
+        FONTS[key] = (font, label)
+    return FONTS[key][0]
+
 class Url:
     def __init__(self, url):
 
@@ -155,7 +168,7 @@ class Layout:
             self.cursor_y += VSTEP
 
     def word(self, word):
-        font = tkinter.font.Font(size=self.size, weight=self.weight, slant=self.style)
+        font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
         self.line.append((self.cursor_x, word, font))
         self.cursor_x += w + font.measure(' ')
