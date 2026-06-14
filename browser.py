@@ -116,6 +116,7 @@ class Layout:
     def __init__(self, tokens):
         self.display_list = []
         self.cursor_x, self.cursor_y = HSTEP, VSTEP
+        self.line = []
 
         # some font attributes
         self.weight: Literal['normal', 'bold'] = 'normal'
@@ -124,6 +125,8 @@ class Layout:
 
         for token in tokens:
             self.token(token)
+
+        self.flush()
 
     def token(self, token):
         if isinstance(token, Text):
@@ -145,16 +148,36 @@ class Layout:
             self.size += 4
         elif token.tag == "/big":
             self.size -= 4
+        elif token.tag == "br":
+            self.flush()
+        elif token.tag == "/p":
+            self.flush()
+            self.cursor_y += VSTEP
 
     def word(self, word):
         font = tkinter.font.Font(size=self.size, weight=self.weight, slant=self.style)
         w = font.measure(word)
-        self.display_list.append((self.cursor_x, self.cursor_y, word, font))
+        self.line.append((self.cursor_x, word, font))
         self.cursor_x += w + font.measure(' ')
 
         if self.cursor_x + w > WIDTH - HSTEP * 3:
-            self.cursor_y += font.metrics('linespace') * 1.25
-            self.cursor_x = HSTEP
+            self.flush()
+
+    def flush(self):
+        if not self.line: return
+        metrics = [font.metrics() for x, word, font in self.line]
+        max_ascent = max(metric['ascent'] for metric in metrics)
+
+        baseline = self.cursor_y + max_ascent * 1.25
+
+        for x, word, font in self.line:
+            y = baseline - font.metrics('ascent')
+            self.display_list.append((x, y, word, font))
+
+        max_descent = max(metric['descent'] for metric in metrics)
+        self.cursor_y += max_descent * 1.25
+        self.cursor_x = HSTEP
+        self.line = []
 
 def lex(body):
     buffer = ''
