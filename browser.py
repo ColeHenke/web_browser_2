@@ -118,12 +118,27 @@ class Browser:
         self.draw()
 
 class Text:
-    def __init__(self, text):
+    def __init__(self, text, parent=None):
         self.text = text
+        self.parent = parent
+        self.children = []
 
-class Tag:
-    def __init__(self, tag):
+    def __repr__(self):
+        return repr(self.text)
+
+class Element:
+    def __init__(self, tag, parent=None):
         self.tag = tag
+        self.parent = parent
+        self.children = []
+
+    def __repr__(self):
+        return "<" + self.tag + ">"
+
+def print_tree(node, indent=0):
+    print(" " * indent, node)
+    for child in node.children:
+        print_tree(child, indent + 2)
 
 class Layout:
     def __init__(self, tokens):
@@ -192,37 +207,56 @@ class Layout:
         self.cursor_x = HSTEP
         self.line = []
 
-def lex(body):
-    buffer = ''
-    out = []
-    in_tag = False
-    skip_chars = 0
-    for i, c in enumerate(body):
-        if skip_chars > 0:
-            skip_chars -= 1
-            continue
-        if c == '<':
-            in_tag = True
-            if buffer: out.append(Text(buffer))
-            buffer = ''
-        elif c == '>':
-            in_tag = False
-            out.append(Tag(buffer))
-            buffer = ''
-        elif in_tag:
-            buffer += c
-        elif not in_tag:
-            if c == '&':
-                if body[i+1:i+4] == 'lt;':
-                    c = '<'
-                    skip_chars += 3
-                elif body[i+1:i+4] == 'gt;':
-                    c = '>'
-                    skip_chars += 3
-            buffer += c
-    if not in_tag and buffer:
-        out.append(Text(buffer))
-    return out
+
+class HtmlParser:
+    def __init__(self, body):
+        self.unfinished = []
+        self.body = body
+
+    def parse(self):
+        text = ''
+        in_tag = False
+        for c in self.body:
+            if c == '<':
+                in_tag = True
+                if text:
+                    self.add_text(text)
+                    text = ''
+            elif c == '>':
+                in_tag = False
+                self.add_tag(text)
+                text = ''
+            else:
+                text += c
+        if not in_tag and text:
+            self.add_text(text)
+        return self.finish()
+
+    def add_text(self, text):
+        if text.isspace(): return
+        parent = self.unfinished[-1]
+        node = Text(text, parent)
+        parent.children.append(node)
+
+    def add_tag(self, tag):
+        if tag.startswith("!"): return
+        if tag.startswith('/'):
+            if len(self.unfinished) == 1: return
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+        else:
+            parent = self.unfinished[-1] if self.unfinished else None
+            node = Element(tag, parent)
+            self.unfinished.append(node)
+
+    def finish(self):
+        while len(self.unfinished) > 1:
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+        return self.unfinished.pop()
+
 
 if __name__ == "__main__":
     import sys
