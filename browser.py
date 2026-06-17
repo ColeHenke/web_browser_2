@@ -10,6 +10,12 @@ WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 
+# 'void' tags
+SELF_CLOSING_TAGS = [
+    "area", "base", "br", "col", "embed", "hr", "img", "input",
+    "link", "meta", "param", "source", "track", "wbr",
+]
+
 # global font cache
 FONTS = {}
 
@@ -108,9 +114,9 @@ class Browser:
 
     def load(self, url):
         body = url.request()
-        tokens = lex(body)
-
-        self.display_list = Layout(tokens).display_list
+        self.nodes = HtmlParser(body).parse()
+        print_tree(self.nodes)
+        self.display_list = Layout(self.nodes).display_list
         self.draw()
 
     def scrolldown(self, e):
@@ -127,8 +133,9 @@ class Text:
         return repr(self.text)
 
 class Element:
-    def __init__(self, tag, parent=None):
+    def __init__(self, tag, attributes, parent=None):
         self.tag = tag
+        self.attributes = attributes
         self.parent = parent
         self.children = []
 
@@ -240,15 +247,32 @@ class HtmlParser:
 
     def add_tag(self, tag):
         if tag.startswith("!"): return
+        tag, attributes = self.get_attributes(tag)
         if tag.startswith('/'):
             if len(self.unfinished) == 1: return
             node = self.unfinished.pop()
             parent = self.unfinished[-1]
             parent.children.append(node)
+        elif tag in SELF_CLOSING_TAGS:
+            parent = self.unfinished[-1]
+            node = Element(tag, parent)
+            parent.children.append(node)
         else:
             parent = self.unfinished[-1] if self.unfinished else None
             node = Element(tag, parent)
             self.unfinished.append(node)
+
+    def get_attributes(self, text):
+        parts = text.split()
+        tag = parts[0].casefold()
+        attributes = {}
+        for attribute_pair in parts[1:]:
+            if '=' in attribute_pair:
+                key, value = attribute_pair.split('=', 1)
+                attributes[key.casefold()] = value.strip('"\'')
+            else:
+                attributes[attribute_pair.casefold()] = ''
+        return tag, attributes
 
     def finish(self):
         while len(self.unfinished) > 1:
