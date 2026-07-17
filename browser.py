@@ -148,7 +148,7 @@ def print_tree(node, indent=0):
         print_tree(child, indent + 2)
 
 class Layout:
-    def __init__(self, tokens):
+    def __init__(self, nodes):
         self.display_list = []
         self.cursor_x, self.cursor_y = HSTEP, VSTEP
         self.line = []
@@ -158,8 +158,7 @@ class Layout:
         self.style: Literal['roman', 'italic'] = 'roman'
         self.size = 12
 
-        for token in tokens:
-            self.token(token)
+        self.recurse(nodes)
 
         self.flush()
 
@@ -167,25 +166,40 @@ class Layout:
         if isinstance(token, Text):
             for word in token.text.split():
                 self.word(word)
-        elif token.tag == "i":
+
+    def recurse(self, tree):
+        if isinstance(tree, Text):
+            for word in tree.text.split():
+                self.word(word)
+        else:
+            self.open_tag(tree.tag)
+            for child in tree.children:
+                self.recurse(child)
+            self.close_tag(tree.tag)
+
+    def open_tag(self, tag):
+        if tag == "i":
             self.style = "italic"
-        elif token.tag == "/i":
-            self.style = "roman"
-        elif token.tag == "b":
+        elif tag == "b":
             self.weight = "bold"
-        elif token.tag == "/b":
-            self.weight = "normal"
-        elif token.tag == "small":
+        elif tag == "small":
             self.size -= 2
-        elif token.tag == "/small":
-            self.size += 2
-        elif token.tag == "big":
+        elif tag == "big":
             self.size += 4
-        elif token.tag == "/big":
-            self.size -= 4
-        elif token.tag == "br":
+        elif tag == "br":
             self.flush()
-        elif token.tag == "/p":
+
+
+    def close_tag(self, tag):
+        if tag == "i":
+            self.style = "roman"
+        elif tag == "b":
+            self.weight = "normal"
+        elif tag == "small":
+            self.size += 2
+        elif tag == "big":
+            self.size -= 4
+        elif tag == "p":
             self.flush()
             self.cursor_y += VSTEP
 
@@ -210,7 +224,7 @@ class Layout:
             self.display_list.append((x, y, word, font))
 
         max_descent = max(metric['descent'] for metric in metrics)
-        self.cursor_y += max_descent * 1.25
+        self.cursor_y = baseline + max_descent * 1.25
         self.cursor_x = HSTEP
         self.line = []
 
