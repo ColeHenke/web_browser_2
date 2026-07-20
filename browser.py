@@ -116,7 +116,9 @@ class Browser:
         body = url.request()
         self.nodes = HtmlParser(body).parse()
         print_tree(self.nodes)
-        self.display_list = Layout(self.nodes).display_list
+        self.document = DocumentLayout(self.nodes)
+        self.document.layout()
+        self.display_list = self.document.display_list
         self.draw()
 
     def scrolldown(self, e):
@@ -147,8 +149,14 @@ def print_tree(node, indent=0):
     for child in node.children:
         print_tree(child, indent + 2)
 
-class Layout:
-    def __init__(self, nodes):
+class BlockLayout:
+    def __init__(self, node, parent, previous):
+        self.node = node
+        self.parent = parent
+        self.previous = previous
+        self.children = []
+
+    def layout(self):
         self.display_list = []
         self.cursor_x, self.cursor_y = HSTEP, VSTEP
         self.line = []
@@ -158,7 +166,7 @@ class Layout:
         self.style: Literal['roman', 'italic'] = 'roman'
         self.size = 12
 
-        self.recurse(nodes)
+        self.recurse(self.node)
 
         self.flush()
 
@@ -227,6 +235,18 @@ class Layout:
         self.cursor_y = baseline + max_descent * 1.25
         self.cursor_x = HSTEP
         self.line = []
+
+class DocumentLayout:
+    def __init__(self, node):
+        self.node = node
+        self.parent = None
+        self.children = []
+
+    def layout(self):
+        child = BlockLayout(self.node, self, None)
+        self.children.append(child)
+        child.layout()
+        self.display_list = child.display_list
 
 
 class HtmlParser:
