@@ -124,7 +124,8 @@ class Browser:
     def load(self, url):
         body = url.request()
         self.nodes = HtmlParser(body).parse()
-        print_tree(self.nodes)
+        style(self.nodes)
+        # print_tree(self.nodes)
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
         self.display_list = []
@@ -281,11 +282,15 @@ class BlockLayout:
 
     def paint(self):
         cmds = []
+
+        bgcolor = self.node.style.get("background-color",
+                                      "transparent")
+        if bgcolor != "transparent":
+            x2, y2 = self.x + self.width, self.y + self.height
+            rect = DrawRect(self.x, self.y, x2, y2, bgcolor)
+            cmds.append(rect)
+
         if self.layout_mode() == 'inline':
-            if isinstance(self.node, Element) and self.node.tag == "pre":
-                x2, y2 = self.x + self.width, self.y + self.height
-                rect = DrawRect(self.x, self.y, x2, y2, "gray")
-                cmds.append(rect)
             for x, y, word, font in self.display_list:
                 cmds.append(DrawText(x, y, word, font))
         return cmds
@@ -357,11 +362,11 @@ class HtmlParser:
             parent.children.append(node)
         elif tag in SELF_CLOSING_TAGS:
             parent = self.unfinished[-1]
-            node = Element(tag, parent)
+            node = Element(tag, attributes, parent)
             parent.children.append(node)
         else:
             parent = self.unfinished[-1] if self.unfinished else None
-            node = Element(tag, parent)
+            node = Element(tag, attributes, parent)
             self.unfinished.append(node)
 
     def get_attributes(self, text):
@@ -489,6 +494,19 @@ class CSSParser:
             else:
                 self.i += 1
         return None
+
+
+def style(node):
+    node.style = {}
+    print(node)
+    if isinstance(node, Element) and "style" in node.attributes:
+        pairs = CSSParser(node.attributes["style"]).body()
+        for property, value in pairs.items():
+            node.style[property] = value
+
+    for child in node.children:
+        style(child)
+
 
 def paint_tree(layout_object, display_list):
     display_list.extend(layout_object.paint())
