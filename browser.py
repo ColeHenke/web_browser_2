@@ -25,7 +25,12 @@ BLOCK_ELEMENTS = [
     "legend", "details", "summary"
 ]
 
-
+INHERITED_PROPERTIES = {
+    "font-size": "16px",
+    "font-style": "normal",
+    "font-weight": "normal",
+    "color": "black",
+}
 
 # global font cache
 FONTS = {}
@@ -123,7 +128,7 @@ class Url:
 class Browser:
     def __init__(self):
         self.window = tkinter.Tk()
-        self.canvas = tkinter.Canvas(self.window, width=WIDTH, height=HEIGHT)
+        self.canvas = tkinter.Canvas(self.window, width=WIDTH, height=HEIGHT, bg="white")
         self.canvas.pack()
         self.display_list = []
         self.scroll = 0
@@ -149,7 +154,7 @@ class Browser:
                  and node.tag == "link"
                  and node.attributes.get("rel") == "stylesheet"
                  and "href" in node.attributes]
-        style(self.nodes, rules)
+        style(self.nodes, sorted(rules, key=cascade_priority))
         for link in links:
             style_url = url.resolve(link)
             try:
@@ -252,45 +257,27 @@ class BlockLayout:
         else:
             return "block"
 
-    def recurse(self, tree):
-        if isinstance(tree, Text):
-            for word in tree.text.split():
-                self.word(word)
+    def recurse(self, node):
+        if isinstance(node, Text):
+            for word in node.text.split():
+                self.word(node, word)
         else:
-            self.open_tag(tree.tag)
-            for child in tree.children:
+            if node.tag == "br":
+                self.flush()
+            for child in node.children:
                 self.recurse(child)
-            self.close_tag(tree.tag)
 
-    def open_tag(self, tag):
-        if tag == "i":
-            self.style = "italic"
-        elif tag == "b":
-            self.weight = "bold"
-        elif tag == "small":
-            self.size -= 2
-        elif tag == "big":
-            self.size += 4
-        elif tag == "br":
-            self.flush()
+    def word(self, node, word):
+        weight = node.style["font-weight"]
+        style = node.style["font-style"]
+        if style == "normal": style = "roman" # css 'normal' -> tk 'roman'
+        size = int(float(node.style["font-size"][:-2]) * .75) # css pixels -> tk points
+        font = get_font(size, weight, style)
 
-    def close_tag(self, tag):
-        if tag == "i":
-            self.style = "roman"
-        elif tag == "b":
-            self.weight = "normal"
-        elif tag == "small":
-            self.size += 2
-        elif tag == "big":
-            self.size -= 4
-        elif tag == "p":
-            self.flush()
-            self.cursor_y += VSTEP
+        color = node.style["color"]
 
-    def word(self, word):
-        font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
-        self.line.append((self.cursor_x, word, font))
+        self.line.append((self.cursor_x, word, font, color))
         self.cursor_x += w + font.measure(' ')
 
         if self.cursor_x + w > self.width:
@@ -298,15 +285,15 @@ class BlockLayout:
 
     def flush(self):
         if not self.line: return
-        metrics = [font.metrics() for x, word, font in self.line]
+        metrics = [font.metrics() for x, word, font, color in self.line]
         max_ascent = max(metric['ascent'] for metric in metrics)
 
         baseline = self.cursor_y + max_ascent * 1.25
 
-        for rel_x, word, font in self.line:
+        for rel_x, word, font, color in self.line:
             x = rel_x + self.x
             y = self.y + baseline - font.metrics('ascent')
-            self.display_list.append((x, y, word, font))
+            self.display_list.append((x, y, word, font, color))
 
         max_descent = max(metric['descent'] for metric in metrics)
         self.cursor_y = baseline + max_descent * 1.25
@@ -324,8 +311,8 @@ class BlockLayout:
             cmds.append(rect)
 
         if self.layout_mode() == 'inline':
-            for x, y, word, font in self.display_list:
-                cmds.append(DrawText(x, y, word, font))
+            for x, y, word, font, color in self.display_list:
+                cmds.append(DrawText(x, y, word, font, color))
         return cmds
 
 
@@ -438,11 +425,12 @@ class HtmlParser:
 
 
 class DrawText:
-    def __init__(self, x1, y1, text, font):
+    def __init__(self, x1, y1, text, font, color):
         self.top = y1
         self.left = x1
         self.text = text
         self.font = font
+        self.color = color
         self.bottom = y1 + font.metrics("linespace")
 
     def execute(self, scroll, canvas):
@@ -450,6 +438,7 @@ class DrawText:
             self.left, self.top - scroll,
             text=self.text,
             font=self.font,
+            fill=self.color,
             anchor='nw')
 
 
@@ -562,6 +551,7 @@ class CSSParser:
 class TagSelector:
     def __init__(self, tag):
         self.tag = tag
+        self.priority = 1
 
     def matches(self, node):
         return isinstance(node, Element) and self.tag == node.tag
@@ -571,6 +561,7 @@ class DescendantSelector:
     def __init__(self, ancestor, descendant):
         self.ancestor = ancestor
         self.descendant = descendant
+        self.priority = ancestor.priority + descendant.priority
 
     def matches(self, node):
         if not self.descendant.matches(node): return False
@@ -580,8 +571,18 @@ class DescendantSelector:
         return False
 
 
+def cascade_priority(rule):
+    selector, body = rule
+    return selector.priority
+
 def style(node, rules):
     node.style = {}
+
+    for property, default_value in INHERITED_PROPERTIES.items():
+        if node.parent:
+            node.style[property] = node.parent.style[property]
+        else:
+            node.style[property] = default_value
 
     for selector, body in rules:
         if not selector.matches(node): continue
@@ -592,6 +593,15 @@ def style(node, rules):
         pairs = CSSParser(node.attributes["style"]).body()
         for property, value in pairs.items():
             node.style[property] = value
+
+    if node.style["font-size"].endswith("%"):
+        if node.parent:
+            parent_font_size = node.parent.style["font-size"]
+        else:
+            parent_font_size = INHERITED_PROPERTIES["font-size"]
+        node_pct = float(node.style["font-size"][:-1]) / 100
+        parent_px = float(parent_font_size[:-2])
+        node.style["font-size"] = str(node_pct * parent_px) + "px"
 
     for child in node.children:
         style(child, rules)
