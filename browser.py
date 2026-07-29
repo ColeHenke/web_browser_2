@@ -124,6 +124,14 @@ class Url:
             return Url(self.scheme + "://" + self.host + \
                        ":" + str(self.port) + url)
 
+    def __str__(self):
+        port_part = ":" + str(self.port)
+        if self.scheme == "https" and self.port == 443:
+            port_part = ""
+        if self.scheme == "http" and self.port == 80:
+            port_part = ""
+        return self.scheme + "://" + self.host + port_part + self.path
+
 
 class Browser:
     def __init__(self):
@@ -172,14 +180,18 @@ class Chrome:
         self.padding = 5
         self.tabbar_top = 0
         self.tabbar_bottom = self.font_height + 2 * self.padding
-
         plus_width = self.font.measure("+") + 2 * self.padding
-        self.newtab_rect = Rect(
-            self.padding, self.padding,
-            self.padding + plus_width,
-            self.padding + self.font_height)
 
-        self.bottom = self.tabbar_bottom
+        self.newtab_rect = Rect(self.padding, self.padding, self.padding + plus_width, self.padding + self.font_height)
+
+        self.urlbar_top = self.tabbar_bottom
+        self.urlbar_bottom = self.urlbar_top + self.font_height + 2 * self.padding
+        self.bottom = self.urlbar_bottom
+        back_width = self.font.measure("<") + 2 * self.padding
+        self.back_rect = Rect(self.padding, self.urlbar_top + self.padding, self.padding + back_width, self.urlbar_bottom - self.padding)
+
+        self.address_rect = Rect(self.back_rect.right + self.padding, self.urlbar_top + self.padding,
+                                 WIDTH - self.padding, self.urlbar_bottom - self.padding)
 
     def tab_rect(self, i):
         tabs_start = self.newtab_rect.right + self.padding
@@ -210,11 +222,21 @@ class Chrome:
             cmds.append(DrawText(
                 bounds.left + self.padding, bounds.top + self.padding,
                 "Tab {}".format(i), self.font, "black"))
+            cmds.append(DrawOutline(self.back_rect, "black", 1))
+            cmds.append(DrawText(self.back_rect.left + self.padding, self.back_rect.top,
+                "<", self.font, "black"))
+
+            cmds.append(DrawOutline(self.address_rect, "black", 1))
+            url = str(self.browser.active_tab.url)
+            cmds.append(DrawText(self.address_rect.left + self.padding, self.address_rect.top,
+                url, self.font, "black"))
         return cmds
 
     def click(self, x, y):
         if self.newtab_rect.contains_point(x, y):
             self.browser.new_tab(Url("https://browser.engineering/index.html"))
+        elif self.back_rect.contains_point(x, y):
+            self.browser.active_tab.go_back()
         else:
             for i, tab in enumerate(self.browser.tabs):
                 if self.tab_rect(i).contains_point(x, y):
@@ -266,6 +288,7 @@ class Tab:
         self.scroll = 0
         self.url = None
         self.tab_height = tab_height
+        self.history = []
 
     def draw(self, canvas, offset):
         canvas.delete("all")
@@ -275,6 +298,7 @@ class Tab:
             cmd.execute(self.scroll - offset, canvas)
 
     def load(self, url):
+        self.history.append(url)
         self.url = url
         body = url.request()
         self.nodes = HtmlParser(body).parse()
@@ -323,6 +347,13 @@ class Tab:
                 url = self.url.resolve(elt.attributes["href"])
                 return self.load(url)
             elt = elt.parent
+
+    def go_back(self):
+        if len(self.history) > 1:
+            self.history.pop()
+            back = self.history.pop()
+            self.load(back)
+
 
 class Text:
     def __init__(self, text, parent=None):
