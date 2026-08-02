@@ -2,6 +2,7 @@ import socket
 import ssl
 import tkinter
 import tkinter.font
+import urllib.parse
 
 from typing import Literal
 
@@ -73,7 +74,7 @@ class Url:
             assert delim == DATA_SCHEME
             self.scheme += delim
 
-    def request(self):
+    def request(self, payload=None):
         if self.scheme == DATA_SCHEME:
             return '<body>{}</body>\r\n'.format(self.content)
 
@@ -84,12 +85,18 @@ class Url:
             ctx = ssl.create_default_context()
             s = ctx.wrap_socket(s, server_hostname=self.host)
 
-        request = 'GET {} HTTP/1.0\r\n'.format(self.path)
+        method = "POST" if payload else "GET"
+        request = "{} {} HTTP/1.0\r\n".format(method, self.path)
         request += 'Host: {}\r\n'.format(self.host)
+        if payload:
+            length = len(payload.encode("utf8"))
+            request += "Content-Length: {}\r\n".format(length)
         request += 'Connection: close\r\n'
         request += 'User-Agent: supa-browsa\r\n'
         request += '\r\n'
-        s.send(request.encode())
+
+        if payload: request += payload
+        s.send(request.encode("utf8"))
 
         response = s.makefile('r', encoding='utf-8', newline='\r\n')
 
@@ -357,11 +364,12 @@ class Tab:
             if cmd.rect.bottom < self.scroll: continue
             cmd.execute(self.scroll - offset, canvas)
 
-    def load(self, url):
+    def load(self, url, payload=None):
         self.history.append(url)
         self.url = url
-        body = url.request()
+        body = url.request(payload)
         self.nodes = HtmlParser(body).parse()
+        print_tree(self.nodes)
         
         self.rules = DEFAULT_STYLE_SHEET.copy()
         links = [node.attributes["href"]
@@ -377,6 +385,7 @@ class Tab:
             except:
                 continue
             self.rules.extend(CSSParser(body).parse())
+        self.render()
 
     def render(self):
         style(self.nodes, sorted(self.rules, key=cascade_priority))
@@ -390,6 +399,10 @@ class Tab:
         self.scroll = min(self.scroll + SCROLL_STEP, max_y)
 
     def click(self, e_x, e_y):
+        if self.focus:
+            self.focus.is_focused = False
+        self.focus = None
+        
         x, y = e_x, e_y
         y += self.scroll
 
@@ -399,9 +412,6 @@ class Tab:
 
         if not objs: return
         elt = objs[-1].node
-
-        if self.focus:
-            self.focus.is_focused = False
 
         while elt:
             if isinstance(elt, Text):
@@ -414,8 +424,13 @@ class Tab:
                 self.focus = elt
                 elt.is_focused = True
                 return self.render()
+            elif elt.tag == "button":
+                while elt:
+                    if elt.tag == "form" and "action" in elt.attributes:
+                        return self.submit_form(elt)
+                    elt = elt.parent
             elt = elt.parent
-            self.render()
+        self.render()
 
     def go_back(self):
         if len(self.history) > 1:
@@ -427,6 +442,26 @@ class Tab:
         if self.focus:
             self.focus.attributes["value"] += char
             self.render()
+
+    def submit_form(self, elt):
+        inputs = [node for node in tree_to_list(elt, [])
+                  if isinstance(node, Element)
+                  and node.tag == "input"
+                  and "name" in node.attributes]
+
+        body = ""
+        for input in inputs:
+            name = input.attributes["name"]
+            value = input.attributes.get("value", "")
+
+            name = urllib.parse.quote(name)
+            value = urllib.parse.quote(value)
+
+            body += "&" + name + "=" + value
+        body = body[1:]
+
+        url = self.url.resolve(elt.attributes["action"])
+        self.load(url, body)
 
 
 class Text:
