@@ -3,8 +3,7 @@ import ssl
 import tkinter
 import tkinter.font
 import urllib.parse
-
-from typing import Literal
+import dukpy
 
 DATA_SCHEME = 'data:text/html,'
 WIDTH, HEIGHT = 800, 600
@@ -37,6 +36,8 @@ INHERITED_PROPERTIES = {
 FONTS = {}
 
 INPUT_WIDTH_PX = 200
+
+RUNTIME_JS = open("runtime.js").read()
 
 # get font from cache or create new one
 def get_font(size, weight, style):
@@ -369,7 +370,22 @@ class Tab:
         self.url = url
         body = url.request(payload)
         self.nodes = HtmlParser(body).parse()
-        print_tree(self.nodes)
+
+        self.js = JSContext()
+        scripts = [node.attributes["src"] for node
+                   in tree_to_list(self.nodes, [])
+                   if isinstance(node, Element)
+                   and node.tag == "script"
+                   and "src" in node.attributes]
+        for script in scripts:
+            script_url = url.resolve(script)
+            try:
+                body = script_url.request()
+            except:
+                continue
+            print("Script returned: ", dukpy.evaljs(body))
+            self.js.run(body)
+        # print_tree(self.nodes)
         
         self.rules = DEFAULT_STYLE_SHEET.copy()
         links = [node.attributes["href"]
@@ -1001,6 +1017,19 @@ class DescendantSelector:
             if self.ancestor.matches(node.parent): return True
             node = node.parent
         return False
+
+
+class JSContext:
+    def __init__(self):
+        self.interp = dukpy.JSInterpreter()
+
+        # python print() calls js log()
+        self.interp.export_function("log", print)
+
+        self.interp.evaljs(RUNTIME_JS)
+
+    def run(self, code):
+        return self.interp.evaljs(code)
 
 
 def cascade_priority(rule):
