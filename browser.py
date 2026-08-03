@@ -1028,8 +1028,11 @@ class JSContext:
 
         self.interp.evaljs(RUNTIME_JS)
 
-    def run(self, code):
-        return self.interp.evaljs(code)
+    def run(self, script, code):
+        try:
+            return self.interp.evaljs(code)
+        except dukpy.JSRuntimeError as e:
+            print("Script", script, "crashed", e)
 
 
 def cascade_priority(rule):
