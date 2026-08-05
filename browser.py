@@ -38,6 +38,8 @@ FONTS = {}
 INPUT_WIDTH_PX = 200
 
 RUNTIME_JS = open("runtime.js").read()
+EVENT_DISPATCH_JS = \
+    "new Node(dukpy.handle).dispatchEvent(new Event(dukpy.type))"
 
 # get font from cache or create new one
 def get_font(size, weight, style):
@@ -371,7 +373,7 @@ class Tab:
         body = url.request(payload)
         self.nodes = HtmlParser(body).parse()
 
-        self.js = JSContext()
+        self.js = JSContext(self)
         scripts = [node.attributes["src"] for node
                    in tree_to_list(self.nodes, [])
                    if isinstance(node, Element)
@@ -383,8 +385,9 @@ class Tab:
                 body = script_url.request()
             except:
                 continue
-            print("Script returned: ", dukpy.evaljs(body))
-            self.js.run(body)
+            self.js.run(script, body)
+
+
         # print_tree(self.nodes)
         
         self.rules = DEFAULT_STYLE_SHEET.copy()
@@ -433,14 +436,17 @@ class Tab:
             if isinstance(elt, Text):
                 pass
             elif elt.tag == "a" and "href" in elt.attributes:
+                self.js.dispatch_event("click", elt)
                 url = self.url.resolve(elt.attributes["href"])
                 return self.load(url)
             elif elt.tag == "input":
+                self.js.dispatch_event("click", elt)
                 elt.attributes["value"] = ""
                 self.focus = elt
                 elt.is_focused = True
                 return self.render()
             elif elt.tag == "button":
+                self.js.dispatch_event("click", elt)
                 while elt:
                     if elt.tag == "form" and "action" in elt.attributes:
                         return self.submit_form(elt)
@@ -476,6 +482,7 @@ class Tab:
             body += "&" + name + "=" + value
         body = body[1:]
 
+        self.js.dispatch_event("click", elt)
         url = self.url.resolve(elt.attributes["action"])
         self.load(url, body)
 
@@ -1020,19 +1027,65 @@ class DescendantSelector:
 
 
 class JSContext:
-    def __init__(self):
+    def __init__(self, tab):
         self.interp = dukpy.JSInterpreter()
+        self.tab = tab
 
         # python print() calls js log()
         self.interp.export_function("log", print)
 
+        self.interp.export_function("querySelectorAll", self.querySelectorAll)
+        self.interp.export_function("getAttribute", self.getAttribute)
+        self.interp.export_function("innerHTML", self.innerHTML_set)
+
         self.interp.evaljs(RUNTIME_JS)
+
+        self.node_to_handle = {}
+        self.handle_to_node = {}
 
     def run(self, script, code):
         try:
             return self.interp.evaljs(code)
         except dukpy.JSRuntimeError as e:
             print("Script", script, "crashed", e)
+
+    def get_handle(self, elt):
+        if elt not in self.node_to_handle:
+            handle = len(self.node_to_handle)
+            self.node_to_handle[elt] = handle
+            self.handle_to_node[handle] = elt
+        else:
+            handle = self.node_to_handle[elt]
+        return handle
+
+    def dispatch_event(self, type, elt):
+        handle = self.node_to_handle.get(elt, -1)
+        self.interp.evaljs(EVENT_DISPATCH_JS, type=type, handle=handle)
+
+    def querySelectorAll(self, selector_text):
+        selector = CSSParser(selector_text).selector()
+
+        nodes = [node for node in tree_to_list(self.tab.nodes, []) if selector.matches(node)]
+
+        # returns something like [1, 3, 5] in which each number is a handle for an element
+        # that DukPy can convert into js objects
+        return [self.get_handle(node) for node in nodes]
+
+    def getAttribute(self, handle, attr):
+        elt = self.handle_to_node[handle]
+        attr = elt.attributes.get(attr, None)
+        return attr if attr else ""
+
+    def innerHTML_set(self, handle, s):
+        doc = HtmlParser("<html><body>" + s + "</body></html>").parse()
+        new_nodes = doc.children[0].children
+
+        elt = self.handle_to_node[handle]
+        elt.children = new_nodes
+        for child in elt.children:
+            child.parent = elt
+
+        self.tab.render()
 
 
 def cascade_priority(rule):
