@@ -38,8 +38,7 @@ FONTS = {}
 INPUT_WIDTH_PX = 200
 
 RUNTIME_JS = open("runtime.js").read()
-EVENT_DISPATCH_JS = \
-    "new Node(dukpy.handle).dispatchEvent(new Event(dukpy.type))"
+EVENT_DISPATCH_JS = "new Node(dukpy.handle).dispatchEvent(new Event(dukpy.type))"
 
 # get font from cache or create new one
 def get_font(size, weight, style):
@@ -436,17 +435,20 @@ class Tab:
             if isinstance(elt, Text):
                 pass
             elif elt.tag == "a" and "href" in elt.attributes:
-                self.js.dispatch_event("click", elt)
+                if self.js.dispatch_event("click", elt):
+                    return
                 url = self.url.resolve(elt.attributes["href"])
                 return self.load(url)
             elif elt.tag == "input":
-                self.js.dispatch_event("click", elt)
+                if self.js.dispatch_event("click", elt):
+                    return
                 elt.attributes["value"] = ""
                 self.focus = elt
                 elt.is_focused = True
                 return self.render()
             elif elt.tag == "button":
-                self.js.dispatch_event("click", elt)
+                if self.js.dispatch_event("click", elt):
+                    return
                 while elt:
                     if elt.tag == "form" and "action" in elt.attributes:
                         return self.submit_form(elt)
@@ -462,6 +464,8 @@ class Tab:
 
     def keypress(self, char):
         if self.focus:
+            if self.js.dispatch_event("keydown", self.focus):
+                return
             self.focus.attributes["value"] += char
             self.render()
 
@@ -482,7 +486,8 @@ class Tab:
             body += "&" + name + "=" + value
         body = body[1:]
 
-        self.js.dispatch_event("click", elt)
+        if self.js.dispatch_event("submit", elt):
+            return
         url = self.url.resolve(elt.attributes["action"])
         self.load(url, body)
 
@@ -1060,7 +1065,8 @@ class JSContext:
 
     def dispatch_event(self, type, elt):
         handle = self.node_to_handle.get(elt, -1)
-        self.interp.evaljs(EVENT_DISPATCH_JS, type=type, handle=handle)
+        do_default = self.interp.evaljs(EVENT_DISPATCH_JS, type=type, handle=handle)
+        return not do_default
 
     def querySelectorAll(self, selector_text):
         selector = CSSParser(selector_text).selector()

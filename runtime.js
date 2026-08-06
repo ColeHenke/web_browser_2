@@ -15,7 +15,14 @@ document = {
 
 function Node(handle) { this.handle = handle; }
 
-function Event(type) { this.type = type; }
+function Event(type) {
+    this.type = type
+    this.do_default = true;
+}
+
+Event.prototype.preventDefault = function() {
+    this.do_default = false;
+}
 
 Node.prototype.getAttribute = function(attr) {
     return call_python("getAttribute", this.handle, attr);

@@ -1,8 +1,15 @@
 var strong = document.querySelectorAll("strong")[0];
+var allow_submit = true;
+
+var form = document.querySelectorAll("form")[0];
+form.addEventListener("submit", function(e) {
+    if (!allow_submit) e.preventDefault();
+});
 
 function lengthCheck() {
     var value = this.getAttribute("value");
-    if (value.length > 10) {
+    allow_submit = value.length <= 100;
+    if (!allow_submit) {
         strong.innerHTML = "Comment too long!";
     }
 }
