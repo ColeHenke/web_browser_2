@@ -2,11 +2,17 @@ import socket
 import urllib.parse
 import random
 
-from pip._internal.network import session
-
-ENTRIES = [ 'Pavel was here' ]
+ENTRIES = [
+    ("No names. We are nameless!", "cerealkiller"),
+    ("HACK THE PLANET!!!", "crashoverride"),
+]
 
 SESSIONS = {}
+
+LOGINS = {
+    "crashoverride": "0cool",
+    "cerealkiller": "emmanuel",
+}
 
 def handle_connection(conx):
     req = conx.makefile("b")
@@ -49,22 +55,48 @@ def handle_connection(conx):
 
 def show_comments(session):
     out = "<!doctype html>"
-    for entry in ENTRIES:
-        out += "<p>" + entry + "</p>"
+    for entry, who in ENTRIES:
+        out += "<p>" + entry + "\n"
+        out += "<i>by " + who + "</i></p>"
 
-    out += "<form action=add method=post>"
-    out += "<p><input name=guest></p>"
-    out += "<p><button>Sign the book!</button></p>"
-    out += "</form>"
+    if "user" in session:
+        out += "<h1>Hello, " + session["user"] + "</h1>"
+        out += "<form action=add method=post>"
+        out += "<p><input name=guest></p>"
+        out += "<p><button>Sign the book!</button></p>"
+        out += "</form>"
+    else:
+        out += "<a href=/login>Sign in to write in the guest book</a>"
 
     out += "<strong></strong>"
     out += "<script src=/comment.js></script>"
     return out
 
 def add_entry(session, params):
-    if 'guest' in params and len(params['guest']) <= 10:
-        ENTRIES.append(params['guest'])
-    return show_comments()
+    if "user" not in session: return
+    if 'guest' in params and len(params['guest']) <= 100:
+        ENTRIES.append((params['guest'], session["user"]))
+
+
+def login_form(session):
+    body = "<!doctype html>"
+    body += "<form action=/ method=post>"
+    body += "<p>Username: <input name=username></p>"
+    body += "<p>Password: <input name=password type=password></p>"
+    body += "<p><button>Log in</button></p>"
+    body += "</form>"
+    return body
+
+def do_login(session, params):
+    username = params.get("username")
+    password = params.get("password")
+    if username in LOGINS and LOGINS[username] == password:
+        session["user"] = username
+        return "200 OK", show_comments(session)
+    else:
+        out = "<!doctype html>"
+        out += "<h1>Invalid password for {}</h1>".format(username)
+        return "401 Unauthorized", out
 
 def do_request(session, method, url, headers, body):
     if method == "GET" and url == "/":
@@ -76,6 +108,11 @@ def do_request(session, method, url, headers, body):
     elif method == "GET" and url == "/comment.js":
         with open("comment.js") as f:
             return "200 OK", f.read()
+    elif method == "GET" and url == "/login":
+        return "200 OK", login_form(session)
+    elif method == "POST" and url == "/":
+        params = form_decode(body)
+        return do_login(session, params)
     
     else:
         return "404 Not Found", not_found(url, method)
