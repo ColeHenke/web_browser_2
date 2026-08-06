@@ -1,7 +1,12 @@
 import socket
 import urllib.parse
+import random
+
+from pip._internal.network import session
 
 ENTRIES = [ 'Pavel was here' ]
+
+SESSIONS = {}
 
 def handle_connection(conx):
     req = conx.makefile("b")
@@ -17,23 +22,32 @@ def handle_connection(conx):
         header, value = line.split(":", 1)
         headers[header.casefold()] = value.strip()
 
+    if "cookie" in headers:
+        token = headers["cookie"][len("token="):]
+    else:
+        token = str(random.random())[2:]
+
     if 'content-length' in headers:
         length = int(headers['content-length'])
         body = req.read(length).decode('utf8')
     else:
         body = None
 
-    status, body = do_request(method, url, headers, body)
+    session = SESSIONS.setdefault(token, {})
+    status, body = do_request(session, method, url, headers, body)
 
     # send the page back to the browser
     response = "HTTP/1.0 {}\r\n".format(status)
+    if "cookie" not in headers:
+        template = "Set-Cookie: token={}\r\n"
+        response += template.format(token)
     response += "Content-Length: {}\r\n".format(
         len(body.encode("utf8")))
     response += "\r\n" + body
     conx.send(response.encode('utf8'))
     conx.close()
 
-def show_comments():
+def show_comments(session):
     out = "<!doctype html>"
     for entry in ENTRIES:
         out += "<p>" + entry + "</p>"
@@ -47,17 +61,18 @@ def show_comments():
     out += "<script src=/comment.js></script>"
     return out
 
-def add_entry(params):
+def add_entry(session, params):
     if 'guest' in params and len(params['guest']) <= 10:
         ENTRIES.append(params['guest'])
     return show_comments()
 
-def do_request(method, url, headers, body):
+def do_request(session, method, url, headers, body):
     if method == "GET" and url == "/":
-        return "200 OK", show_comments()
+        return "200 OK", show_comments(session)
     elif method == "POST" and url == "/add":
         params = form_decode(body)
-        return "200 OK", add_entry(params)
+        add_entry(session, params)
+        return "200 OK", show_comments(session)
     elif method == "GET" and url == "/comment.js":
         with open("comment.js") as f:
             return "200 OK", f.read()
