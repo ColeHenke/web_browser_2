@@ -32,6 +32,8 @@ INHERITED_PROPERTIES = {
     "color": "black",
 }
 
+COOKIE_JAR = {} # silly name for a silly technology
+
 # global font cache
 FONTS = {}
 
@@ -90,6 +92,9 @@ class Url:
         method = "POST" if payload else "GET"
         request = "{} {} HTTP/1.0\r\n".format(method, self.path)
         request += 'Host: {}\r\n'.format(self.host)
+        if self.host in COOKIE_JAR:
+            cookie = COOKIE_JAR[self.host]
+            request += "Cookie: {}\r\n".format(cookie)
         if payload:
             length = len(payload.encode("utf8"))
             request += "Content-Length: {}\r\n".format(length)
@@ -105,16 +110,19 @@ class Url:
         statuline = response.readline()
         version, status, message = statuline.split(' ', 2)
 
-        headers = {}
+        response_headers = {}
         while True:
             line = response.readline()
+            if "set-cookie" in response_headers:
+                cookie = response_headers["set-cookie"]
+                COOKIE_JAR[self.host] = cookie
             if line == '\r\n':
                 break
             header, value = line.split(':', 1)
-            headers[header.casefold()] = value.strip()
+            response_headers[header.casefold()] = value.strip()
 
-        assert 'transfer-encoding' not in headers
-        assert 'content-encoding' not in headers
+        assert 'transfer-encoding' not in response_headers
+        assert 'content-encoding' not in response_headers
 
         content = response.read()
         s.close()
