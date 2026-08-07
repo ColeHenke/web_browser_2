@@ -143,6 +143,9 @@ class Url:
             return Url(self.scheme + "://" + self.host + \
                        ":" + str(self.port) + url)
 
+    def origin(self):
+        return self.scheme + "://" + self.host + ":" + str(self.port)
+
     def __str__(self):
         port_part = ":" + str(self.port)
         if self.scheme == "https" and self.port == 443:
@@ -1105,6 +1108,10 @@ class JSContext:
     def XMLHttpRequest_send(self, method, url, body):
         full_url = self.tab.url.resolve(url)
         headers, out = full_url.request(body)
+
+        if full_url.origin() != self.tab.url.origin():
+            raise Exception("Cross-origin XHR request not allowed")
+
         return out
 
 
