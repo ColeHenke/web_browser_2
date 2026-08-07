@@ -60,11 +60,14 @@ def show_comments(session):
         out += "<i>by " + who + "</i></p>"
 
     if "user" in session:
+        nonce = str(random.random())[2:]
+        session["nonce"] = nonce
         out += "<h1>Hello, " + session["user"] + "</h1>"
         out += "<form action=add method=post>"
         out += "<p><input name=guest></p>"
         out += "<p><button>Sign the book!</button></p>"
         out += "</form>"
+        out += "<input name=nonce type=hidden value=" + nonce + ">"
     else:
         out += "<a href=/login>Sign in to write in the guest book</a>"
 
@@ -74,6 +77,8 @@ def show_comments(session):
 
 def add_entry(session, params):
     if "user" not in session: return
+    if "nonce" not in session or "nonce" not in params: return
+    if session["nonce"] != params["nonce"]: return
     if 'guest' in params and len(params['guest']) <= 100:
         ENTRIES.append((params['guest'], session["user"]))
 
