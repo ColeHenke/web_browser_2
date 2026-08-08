@@ -50,6 +50,8 @@ def handle_connection(conx):
         response += template.format(token)
     response += "Content-Length: {}\r\n".format(
         len(body.encode("utf8")))
+    csp = "default-src http://localhost:8000"
+    response += "Content-Security-Policy: {}\r\n".format(csp)
     response += "\r\n" + body
     conx.send(response.encode('utf8'))
     conx.close()
@@ -74,6 +76,7 @@ def show_comments(session):
 
     out += "<strong></strong>"
     out += "<script src=/comment.js></script>"
+    out += "<script src=https://example.com/evil.js></script>"
     return out
 
 def add_entry(session, params):
